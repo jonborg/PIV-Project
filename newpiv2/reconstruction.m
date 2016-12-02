@@ -172,20 +172,21 @@ function [pcloud, transforms]=reconstruction(image_name, depth_cam, rgb_cam, Rdt
             
             %CL will have the xyz of all images
             CL=cl1;
-            
-            %total point cloud (now it only is the point cloud of the origin image
-            p=pointCloud(XYZ,'Color',CL);
         end
+        
+        xyz1=transforms(im_pairs).R*xyz1'+repmat(transforms(im_pairs).T,1,480*640);
+        xyz1=xyz1';
+        p1=pointCloud(xyz1,'Color',cl1);
         
         %point cloud of image 2 transformed
         p2=pointCloud(xyz2,'Color',cl2);
         
-        %ICP to adjust p2 to p
-         [tform,p2]=pcregrigid(p2,p,'InlierRatio',inlier_max/307200,'MaxIterations',1);
+        %ICP to adjust p2 to p1
+        [tform,p2]=pcregrigid(p2,p1,'InlierRatio',inlier_max/307200,'MaxIterations',1);
         
         %Update the transforms with the new transformation
-         transforms(im_pairs+1).R=tform.T(1:3,1:3)'*transforms(im_pairs+1).R;
-         transforms(im_pairs+1).T=tform.T(1:3,1:3)'*transforms(im_pairs+1).T+tform.T(4,1:3)';
+        transforms(im_pairs+1).R=tform.T(1:3,1:3)'*transforms(im_pairs+1).R;
+        transforms(im_pairs+1).T=tform.T(1:3,1:3)'*transforms(im_pairs+1).T+tform.T(4,1:3)';
         
         %XYZ and CL have the updated information of the xyz of the image 2 
         XYZ=[XYZ;p2.Location];
@@ -197,7 +198,6 @@ function [pcloud, transforms]=reconstruction(image_name, depth_cam, rgb_cam, Rdt
         [XYZ,iold,inew]=unique(fix(XYZ*1000),'rows');
         XYZ=XYZ/1000;
         CL=CL(iold,:);
-        p=pointCloud(XYZ,'Color',CL);
     end
     
     %shows the final point cloud
