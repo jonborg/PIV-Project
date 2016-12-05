@@ -1,6 +1,9 @@
 function [pcloud, transforms]=reconstruction(image_name, depth_cam, rgb_cam, Rdtrgb,Tdtrgb)
-    tic
+    
+    image_name=image_name(1:length(image_name));
+    
     for im_pairs=1:length(image_name)-1
+        
         %indicates in the command window what pair of images being analised
         display([image_name(im_pairs).rgb,' and ',image_name(im_pairs+1).rgb])
         
@@ -46,21 +49,15 @@ function [pcloud, transforms]=reconstruction(image_name, depth_cam, rgb_cam, Rdt
         %to index of its 1st image match
         u2=fb(1,matches(2,:));
         v2=fb(2,matches(2,:));
+                        
+        %from the (u,v), it gets the xyz index 
+        indice1=480*floor(u1)+floor(v1);
+        indice2=480*floor(u2)+floor(v2);
         
-        %future xyz of (u1,v1) and (u2,v2) respectively
-        points1=zeros(length(matches),3);
-        points2=zeros(length(matches),3);
-        
-        for i=1:length(matches)
-            %from the (u,v), it gets the xyz index 
-            indice1(i)=480*floor(u1(i))+floor(v1(i));
-            indice2(i)=480*floor(u2(i))+floor(v2(i));
+        %xyz of the matched features (inliers and outliers)
+        points1=xyz1(indice1,:);
+        points2=xyz2(indice2,:);
             
-            %xyz of the matched features (inliers and outliers)
-            points1(i,:)=xyz1(indice1(i),:);
-            points2(i,:)=xyz2(indice2(i),:)';
-        end
-
         %max number of inliers detected by RANSAC (initialization)
         inlier_max=0;
         iterations=0;
@@ -177,19 +174,20 @@ function [pcloud, transforms]=reconstruction(image_name, depth_cam, rgb_cam, Rdt
         xyz1=transforms(im_pairs).R*xyz1'+repmat(transforms(im_pairs).T,1,480*640);
         xyz1=xyz1';
         p1=pointCloud(xyz1,'Color',cl1);
-        
+        p1=pcdownsample(p1,'gridAverage',0.01);
         %point cloud of image 2 transformed
         p2=pointCloud(xyz2,'Color',cl2);
-        
+        p2=pcdownsample(p2,'gridAverage',0.01);
         %ICP to adjust p2 to p1
-        [tform,p2]=pcregrigid(p2,p1,'InlierRatio',inlier_max/307200,'MaxIterations',1);
+        [tform]=pcregrigid(p2,p1,'InlierRatio',inlier_max/307200);
         
         %Update the transforms with the new transformation
         transforms(im_pairs+1).R=tform.T(1:3,1:3)'*transforms(im_pairs+1).R;
         transforms(im_pairs+1).T=tform.T(1:3,1:3)'*transforms(im_pairs+1).T+tform.T(4,1:3)';
         
+        xyz2=tform.T(1:3,1:3)*xyz2'+repmat(tform.T(4,1:3)',1,480*640);
         %XYZ and CL have the updated information of the xyz of the image 2 
-        XYZ=[XYZ;p2.Location];
+        XYZ=[XYZ;xyz2'];
         CL=[CL;cl2];
         
         %filters the xyz points. If there are points that are less than a
@@ -198,11 +196,12 @@ function [pcloud, transforms]=reconstruction(image_name, depth_cam, rgb_cam, Rdt
         [XYZ,iold,inew]=unique(fix(XYZ*1000),'rows');
         XYZ=XYZ/1000;
         CL=CL(iold,:);
+        
     end
     
     %shows the final point cloud
     p=pointCloud(XYZ,'Color',CL);
     showPointCloud(p);
-    pcloud=[XYZ,CL];
-    toc
+    pcloud=[double(XYZ),double(CL)];
+   
 end
